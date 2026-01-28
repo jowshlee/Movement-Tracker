@@ -128,13 +128,19 @@
       color: var(--muted);
       margin: 10px 0 6px;
     }
-    .exercise-grid {
+    .exercise-list {
       display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
+      flex-direction: column;
+      gap: 6px;
       margin-bottom: 10px;
     }
-    .exercise-btn {
+    .exercise-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .exercise-chip {
       border-radius: 999px;
       border: 1px solid #1f2937;
       background: var(--button-bg);
@@ -145,8 +151,10 @@
       align-items: center;
       gap: 6px;
       cursor: pointer;
+      flex-shrink: 1;
+      min-width: 0;
     }
-    .exercise-btn.active {
+    .exercise-chip.active {
       border-color: var(--accent);
       background: var(--button-bg-active);
       box-shadow: 0 0 0 1px #16a34a55;
@@ -156,14 +164,34 @@
       height: 7px;
       border-radius: 999px;
       background: #4b5563;
+      flex-shrink: 0;
     }
-    .exercise-btn.active .exercise-dot {
+    .exercise-chip.active .exercise-dot {
       background: var(--accent);
+    }
+    .exercise-name {
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      max-width: 200px;
     }
     .exercise-count {
       font-size: 0.75rem;
       color: var(--muted);
       margin-left: 4px;
+      flex-shrink: 0;
+    }
+    .exercise-delete-btn {
+      border: none;
+      background: transparent;
+      color: #6b7280;
+      font-size: 0.85rem;
+      cursor: pointer;
+      padding: 4px 6px;
+      flex-shrink: 0;
+    }
+    .exercise-delete-btn:hover {
+      color: #f97373;
     }
     .add-exercise-btn {
       margin-top: 8px;
@@ -271,7 +299,7 @@
       </button>
 
       <div class="section-title">Exercises I did today</div>
-      <div class="exercise-grid" id="exerciseGrid"></div>
+      <div class="exercise-list" id="exerciseList"></div>
 
       <button class="add-exercise-btn" id="addExerciseBtn">+ Add Exercise</button>
 
@@ -307,7 +335,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
-    const STORAGE_KEY = "movementTracker_v3";
+    const STORAGE_KEY = "movementTracker_v4";
 
     let state = {
       streak: 0,
@@ -389,7 +417,30 @@
         state.exercises.push(trimmed);
         saveState();
         updateUI();
+        updateCharts();
       }
+    }
+
+    function deleteExercise(name) {
+      const confirmed = confirm(
+        `Delete "${name}" and all its historical counts? This cannot be undone.`
+      );
+      if (!confirmed) return;
+
+      // Remove from exercises list
+      state.exercises = state.exercises.filter((n) => n !== name);
+
+      // Remove its counts
+      if (state.exerciseCounts[name] !== undefined) {
+        delete state.exerciseCounts[name];
+      }
+
+      // Remove from selectedExercises if present
+      state.selectedExercises = state.selectedExercises.filter((n) => n !== name);
+
+      saveState();
+      updateUI();
+      updateCharts();
     }
 
     function resetAll() {
@@ -480,23 +531,39 @@
       return { labels, data };
     }
 
-    function initExerciseButtons() {
-      const grid = document.getElementById("exerciseGrid");
-      grid.innerHTML = "";
+    function initExerciseList() {
+      const list = document.getElementById("exerciseList");
+      list.innerHTML = "";
+
       state.exercises.forEach((name) => {
         const count = state.exerciseCounts[name] || 0;
-        const btn = document.createElement("button");
-        btn.className = "exercise-btn";
+
+        const row = document.createElement("div");
+        row.className = "exercise-row";
+
+        const chip = document.createElement("button");
+        chip.className = "exercise-chip";
         if (state.selectedExercises.includes(name)) {
-          btn.classList.add("active");
+          chip.classList.add("active");
         }
-        btn.innerHTML = `
+        chip.innerHTML = `
           <span class="exercise-dot"></span>
-          <span>${name}</span>
+          <span class="exercise-name">${name}</span>
           <span class="exercise-count">(${count})</span>
         `;
-        btn.addEventListener("click", () => toggleExercise(name));
-        grid.appendChild(btn);
+        chip.addEventListener("click", () => toggleExercise(name));
+
+        const delBtn = document.createElement("button");
+        delBtn.className = "exercise-delete-btn";
+        delBtn.textContent = "✖";
+        delBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          deleteExercise(name);
+        });
+
+        row.appendChild(chip);
+        row.appendChild(delBtn);
+        list.appendChild(row);
       });
     }
 
@@ -515,7 +582,7 @@
         todayStatusEl.textContent = "Today not logged yet";
       }
 
-      initExerciseButtons();
+      initExerciseList();
     }
 
     function initCharts() {

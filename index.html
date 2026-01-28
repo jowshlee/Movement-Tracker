@@ -235,10 +235,12 @@
         const btn = document.createElement("button");
         btn.className = "exercise-btn";
         btn.innerHTML = `
-          <span class="exercise-dot"></span>
-          ${name}
-          <span class="exercise-count">(${count})</span>
-        `;
+  <span class="exercise-dot"></span>
+  ${name}
+  <span class="exercise-count">(${count})</span>
+  <span class="delete-exercise" data-del="${name}" style="margin-left:6px; color:#f87171; font-size:0.9rem; cursor:pointer;">✖</span>
+`;
+        
         btn.onclick = () => toggleExercise(name);
         grid.appendChild(btn);
       });

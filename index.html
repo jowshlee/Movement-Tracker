@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Daily Movement Tracker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #111827;
+      --accent: #22c55e;
+      --accent-soft: #16a34a33;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --danger: #f97373;
+      --button-bg: #1f2937;
+      --button-bg-active: #22c55e22;
+    }
+    * {
+      box-sizing: border-box;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+        "Segoe UI", sans-serif;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background: radial-gradient(circle at top, #1f2937 0, #020617 55%);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .app {
+      width: 100%;
+      max-width: 480px;
+      padding: 16px;
+    }
+    .card {
+      background: linear-gradient(145deg, #020617, #020617, #020617, #020617);
+      border-radius: 18px;
+      padding: 18px 16px 20px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.7);
+      border: 1px solid #1f2937;
+    }
+    h1 {
+      font-size: 1.4rem;
+      margin: 0 0 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    h1 span.logo-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 12px var(--accent);
+    }
+    .subtitle {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+    .streak-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .streak-main {
+      font-size: 2.2rem;
+      font-weight: 650;
+      letter-spacing: 0.03em;
+    }
+    .streak-label {
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+    .last-logged {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+    .primary-btn {
+      width: 100%;
+      border-radius: 999px;
+      border: none;
+      padding: 11px 14px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      background: radial-gradient(circle at top left, #22c55e, #16a34a);
+      color: #022c22;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 12px 30px rgba(34, 197, 94, 0.35);
+      cursor: pointer;
+      margin-bottom: 14px;
+    }
+    .primary-btn:active {
+      transform: translateY(1px);
+      box-shadow: 0 6px 18px rgba(34, 197, 94, 0.3);
+    }
+    .section-title {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      margin: 10px 0 6px;
+    }
+    .exercise-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .exercise-btn {
+      border-radius: 999px;
+      border: 1px solid #1f2937;
+      background: var(--button-bg);
+      color: var(--text);
+      padding: 7px 11px;
+      font-size: 0.8rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+    .exercise-btn.active {
+      border-color: var(--accent);
+      background: var(--button-bg-active);
+      box-shadow: 0 0 0 1px #16a34a55;
+    }
+    .exercise-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: #4b5563;
+    }
+    .exercise-btn.active .exercise-dot {
+      background: var(--accent);
+    }
+    .add-exercise-btn {
+      margin-top: 8px;
+      padding: 6px 10px;
+      font-size: 0.75rem;
+      border-radius: 999px;
+      border: 1px solid #1f2937;
+      background: #020617;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .exercise-count {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-left: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="card">
+      <h1><span class="logo-dot"></span>Daily Movement</h1>
+      <div class="subtitle">One tap. One day at a time.</div>
+
+      <div class="streak-row">
+        <div>
+          <div class="streak-label">Current streak</div>
+          <div class="streak-main" id="streakCount">0</div>
+        </div>
+      </div>
+
+      <div class="last-logged" id="lastLoggedText">Last logged: —</div>
+
+      <button class="primary-btn" id="movedTodayBtn">
+        ✔️ I moved today
+      </button>
+
+      <div class="section-title">Exercises I did today</div>
+      <div class="exercise-grid" id="exerciseGrid"></div>
+
+      <button class="add-exercise-btn" id="addExerciseBtn">+ Add Exercise</button>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "movementTracker_v2";
+
+    let state = {
+      streak: 0,
+      lastDate: null,
+      todayExercises: [],
+      exerciseCounts: {},
+      exercises: [
+        "Dumbbells",
+        "Bands (door)",
+        "Bands (other)",
+        "Elliptical",
+        "Bike",
+        "Forearm bars",
+        "Walk inside",
+        "Outdoor walk",
+        "Volleyball",
+        "5-minute circuit"
+      ]
+    };
+
+    function todayISO() {
+      const d = new Date();
+      return d.toISOString().split("T")[0];
+    }
+
+    function loadState() {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) state = Object.assign(state, JSON.parse(raw));
+    }
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function updateUI() {
+      document.getElementById("streakCount").textContent = state.streak;
+      document.getElementById("lastLoggedText").textContent =
+        "Last logged: " + (state.lastDate || "—");
+
+      const grid = document.getElementById("exerciseGrid");
+      grid.innerHTML = "";
+
+      state.exercises.forEach((name) => {
+        const count = state.exerciseCounts[name] || 0;
+        const btn = document.createElement("button");
+        btn.className = "exercise-btn";
+        btn.innerHTML = `
+          <span class="exercise-dot"></span>
+          ${name}
+          <span class="exercise-count">(${count})</span>
+        `;
+        btn.onclick = () => toggleExercise(name);
+        grid.appendChild(btn);
+      });
+    }
+
+    function logMovement() {
+      const today = todayISO();
+
+      if (state.lastDate === today) return;
+
+      if (!state.lastDate) {
+        state.streak = 1;
+      } else {
+        const diff =
+          (new Date(today) - new Date(state.lastDate)) /
+          (1000 * 60 * 60 * 24);
+        state.streak = diff === 1 ? state.streak + 1 : 1;
+      }
+
+      state.lastDate = today;
+      saveState();
+      updateUI();
+    }
+
+    function toggleExercise(name) {
+      state.exerciseCounts[name] = (state.exerciseCounts[name] || 0) + 1;
+      saveState();
+      updateUI();
+    }
+
+    function addExercise() {
+      const name = prompt("Enter new exercise name:");
+      if (!name) return;
+      if (!state.exercises.includes(name)) {
+        state.exercises.push(name);
+        saveState();
+        updateUI();
+      }
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      loadState();
+      updateUI();
+
+      document.getElementById("movedTodayBtn").onclick = logMovement;
+      document.getElementById("addExerciseBtn").onclick = addExercise;
+    });
+  </script>
+</body>
+</html>

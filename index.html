@@ -78,6 +78,23 @@
       text-transform: uppercase;
       letter-spacing: 0.12em;
     }
+    .pill {
+      font-size: 0.75rem;
+      padding: 4px 9px;
+      border-radius: 999px;
+      border: 1px solid #1f2937;
+      background: #020617;
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .pill-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--accent);
+    }
     .last-logged {
       font-size: 0.8rem;
       color: var(--muted);
@@ -143,6 +160,11 @@
     .exercise-btn.active .exercise-dot {
       background: var(--accent);
     }
+    .exercise-count {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-left: 4px;
+    }
     .add-exercise-btn {
       margin-top: 8px;
       padding: 6px 10px;
@@ -153,10 +175,75 @@
       color: var(--muted);
       cursor: pointer;
     }
-    .exercise-count {
-      font-size: 0.75rem;
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 10px;
+      font-size: 0.78rem;
       color: var(--muted);
-      margin-left: 4px;
+    }
+    .status-pill {
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid #1f2937;
+      background: #020617;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .status-pill-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: #22c55e;
+    }
+    .reset-btn {
+      border: none;
+      background: transparent;
+      color: #6b7280;
+      font-size: 0.75rem;
+      text-decoration: underline;
+      cursor: pointer;
+      padding: 0;
+    }
+    .stats-toggle {
+      margin-top: 16px;
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid #1f2937;
+      background: #020617;
+      color: var(--muted);
+      padding: 8px 10px;
+      font-size: 0.8rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+    }
+    .stats-section {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid #1f2937;
+      display: none;
+    }
+    .chart-container {
+      margin-top: 10px;
+      background: #020617;
+      border-radius: 12px;
+      padding: 10px;
+      border: 1px solid #1f2937;
+    }
+    .chart-title {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .footer {
+      margin-top: 14px;
+      font-size: 0.7rem;
+      color: #4b5563;
+      text-align: center;
     }
   </style>
 </head>
@@ -171,6 +258,10 @@
           <div class="streak-label">Current streak</div>
           <div class="streak-main" id="streakCount">0</div>
         </div>
+        <div class="pill">
+          <span class="pill-dot"></span>
+          <span id="movementDaysText">Total movement days: 0</span>
+        </div>
       </div>
 
       <div class="last-logged" id="lastLoggedText">Last logged: —</div>
@@ -183,17 +274,46 @@
       <div class="exercise-grid" id="exerciseGrid"></div>
 
       <button class="add-exercise-btn" id="addExerciseBtn">+ Add Exercise</button>
+
+      <div class="status-row">
+        <span class="status-pill">
+          <span class="status-pill-dot"></span>
+          <span id="todayStatus">Today not logged yet</span>
+        </span>
+        <button class="reset-btn" id="resetBtn">Reset all data</button>
+      </div>
+
+      <button class="stats-toggle" id="statsToggle">
+        <span>Stats & Charts</span>
+        <span id="statsToggleIcon">▼</span>
+      </button>
+
+      <div class="stats-section" id="statsSection">
+        <div class="chart-container">
+          <div class="chart-title">Exercise totals</div>
+          <canvas id="exerciseChart" height="160"></canvas>
+        </div>
+        <div class="chart-container">
+          <div class="chart-title">Total movement days over time</div>
+          <canvas id="movementChart" height="160"></canvas>
+        </div>
+      </div>
+
+      <div class="footer">
+        Data is stored only on this device using localStorage.
+      </div>
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
-    const STORAGE_KEY = "movementTracker_v2";
+    const STORAGE_KEY = "movementTracker_v3";
 
     let state = {
       streak: 0,
-      lastDate: null,
-      todayExercises: [],
-      exerciseCounts: {},
+      lastDate: null,              // "YYYY-MM-DD"
+      totalMovementDays: 0,
+      movementDates: [],           // array of "YYYY-MM-DD"
       exercises: [
         "Dumbbells",
         "Bands (door)",
@@ -205,88 +325,310 @@
         "Outdoor walk",
         "Volleyball",
         "5-minute circuit"
-      ]
+      ],
+      exerciseCounts: {},          // name -> count
+      selectedExercises: []        // names selected for today
     };
+
+    let exerciseChart = null;
+    let movementChart = null;
 
     function todayISO() {
       const d = new Date();
       return d.toISOString().split("T")[0];
     }
 
-    function loadState() {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) state = Object.assign(state, JSON.parse(raw));
-    }
-
-    function saveState() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    }
-
-    function updateUI() {
-      document.getElementById("streakCount").textContent = state.streak;
-      document.getElementById("lastLoggedText").textContent =
-        "Last logged: " + (state.lastDate || "—");
-
-      const grid = document.getElementById("exerciseGrid");
-      grid.innerHTML = "";
-
-      state.exercises.forEach((name) => {
-        const count = state.exerciseCounts[name] || 0;
-        const btn = document.createElement("button");
-        btn.className = "exercise-btn";
-        btn.innerHTML = `
-  <span class="exercise-dot"></span>
-  ${name}
-  <span class="exercise-count">(${count})</span>
-  <span class="delete-exercise" data-del="${name}" style="margin-left:6px; color:#f87171; font-size:0.9rem; cursor:pointer;">✖</span>
-`;
-        
-        btn.onclick = () => toggleExercise(name);
-        grid.appendChild(btn);
+    function formatDisplayDate(iso) {
+      if (!iso) return "—";
+      const [y, m, d] = iso.split("-");
+      const date = new Date(Number(y), Number(m) - 1, Number(d));
+      return date.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric"
       });
     }
 
-    function logMovement() {
-      const today = todayISO();
-
-      if (state.lastDate === today) return;
-
-      if (!state.lastDate) {
-        state.streak = 1;
-      } else {
-        const diff =
-          (new Date(today) - new Date(state.lastDate)) /
-          (1000 * 60 * 60 * 24);
-        state.streak = diff === 1 ? state.streak + 1 : 1;
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object") {
+          state = Object.assign(state, parsed);
+        }
+      } catch (e) {
+        console.error("Failed to load state", e);
       }
+    }
 
-      state.lastDate = today;
-      saveState();
-      updateUI();
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (e) {
+        console.error("Failed to save state", e);
+      }
     }
 
     function toggleExercise(name) {
-      state.exerciseCounts[name] = (state.exerciseCounts[name] || 0) + 1;
-      saveState();
+      const idx = state.selectedExercises.indexOf(name);
+      if (idx === -1) {
+        state.selectedExercises.push(name);
+      } else {
+        state.selectedExercises.splice(idx, 1);
+      }
       updateUI();
     }
 
     function addExercise() {
       const name = prompt("Enter new exercise name:");
       if (!name) return;
-      if (!state.exercises.includes(name)) {
-        state.exercises.push(name);
+      const trimmed = name.trim();
+      if (!trimmed) return;
+      if (!state.exercises.includes(trimmed)) {
+        state.exercises.push(trimmed);
         saveState();
         updateUI();
       }
     }
 
+    function resetAll() {
+      if (!confirm("Reset streak, movement days, and all exercise data?")) return;
+      state = {
+        streak: 0,
+        lastDate: null,
+        totalMovementDays: 0,
+        movementDates: [],
+        exercises: state.exercises.slice(), // keep exercise list
+        exerciseCounts: {},
+        selectedExercises: []
+      };
+      saveState();
+      updateUI();
+      updateCharts();
+    }
+
+    function logMovementToday() {
+      const today = todayISO();
+
+      // Streak logic
+      if (state.lastDate === today) {
+        // Already logged today: only update exercises, not streak/movementDays
+      } else {
+        if (!state.lastDate) {
+          state.streak = 1;
+        } else {
+          const last = new Date(state.lastDate);
+          const now = new Date(today);
+          const diffDays = Math.round(
+            (now - last) / (1000 * 60 * 60 * 24)
+          );
+          if (diffDays === 1) {
+            state.streak += 1;
+          } else {
+            state.streak = 1;
+          }
+        }
+
+        state.lastDate = today;
+
+        // Movement days logic (cumulative, calendar-based)
+        if (!state.movementDates.includes(today)) {
+          state.movementDates.push(today);
+          state.movementDates.sort();
+          state.totalMovementDays = state.movementDates.length;
+        }
+      }
+
+      // Exercise counts: increment for all selected
+      state.selectedExercises.forEach((name) => {
+        state.exerciseCounts[name] = (state.exerciseCounts[name] || 0) + 1;
+      });
+
+      // Clear selections after logging
+      state.selectedExercises = [];
+
+      saveState();
+      updateUI();
+      updateCharts();
+    }
+
+    function buildMovementTimeline() {
+      if (!state.movementDates.length) return { labels: [], data: [] };
+
+      const dates = state.movementDates.slice().sort();
+      const start = new Date(dates[0]);
+      const end = new Date(todayISO());
+
+      const labels = [];
+      const data = [];
+      const movementSet = new Set(dates);
+
+      let current = new Date(start);
+      let cumulative = 0;
+
+      while (current <= end) {
+        const iso = current.toISOString().split("T")[0];
+        labels.push(iso);
+        if (movementSet.has(iso)) {
+          cumulative += 1;
+        }
+        data.push(cumulative);
+        current.setDate(current.getDate() + 1);
+      }
+
+      return { labels, data };
+    }
+
+    function initExerciseButtons() {
+      const grid = document.getElementById("exerciseGrid");
+      grid.innerHTML = "";
+      state.exercises.forEach((name) => {
+        const count = state.exerciseCounts[name] || 0;
+        const btn = document.createElement("button");
+        btn.className = "exercise-btn";
+        if (state.selectedExercises.includes(name)) {
+          btn.classList.add("active");
+        }
+        btn.innerHTML = `
+          <span class="exercise-dot"></span>
+          <span>${name}</span>
+          <span class="exercise-count">(${count})</span>
+        `;
+        btn.addEventListener("click", () => toggleExercise(name));
+        grid.appendChild(btn);
+      });
+    }
+
+    function updateUI() {
+      document.getElementById("streakCount").textContent = state.streak || 0;
+      document.getElementById("lastLoggedText").textContent =
+        "Last logged: " + (state.lastDate ? formatDisplayDate(state.lastDate) : "—");
+      document.getElementById("movementDaysText").textContent =
+        "Total movement days: " + (state.totalMovementDays || 0);
+
+      const today = todayISO();
+      const todayStatusEl = document.getElementById("todayStatus");
+      if (state.lastDate === today) {
+        todayStatusEl.textContent = "Today logged";
+      } else {
+        todayStatusEl.textContent = "Today not logged yet";
+      }
+
+      initExerciseButtons();
+    }
+
+    function initCharts() {
+      const exerciseCtx = document.getElementById("exerciseChart").getContext("2d");
+      const movementCtx = document.getElementById("movementChart").getContext("2d");
+
+      exerciseChart = new Chart(exerciseCtx, {
+        type: "bar",
+        data: {
+          labels: [],
+          datasets: [{
+            label: "Times done",
+            data: [],
+            backgroundColor: "rgba(34, 197, 94, 0.6)",
+            borderColor: "rgba(34, 197, 94, 1)",
+            borderWidth: 1,
+            borderRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              ticks: { color: "#9ca3af", font: { size: 10 } },
+              grid: { display: false }
+            },
+            y: {
+              ticks: { color: "#9ca3af", stepSize: 1, precision: 0 },
+              grid: { color: "#1f2937" }
+            }
+          },
+          plugins: {
+            legend: { display: false }
+          }
+        }
+      });
+
+      movementChart = new Chart(movementCtx, {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [{
+            label: "Total movement days",
+            data: [],
+            borderColor: "rgba(59, 130, 246, 1)",
+            backgroundColor: "rgba(59, 130, 246, 0.2)",
+            borderWidth: 2,
+            tension: 0.25,
+            pointRadius: 2,
+            pointBackgroundColor: "rgba(59, 130, 246, 1)"
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              ticks: { color: "#9ca3af", font: { size: 9 } },
+              grid: { display: false }
+            },
+            y: {
+              ticks: { color: "#9ca3af", stepSize: 1, precision: 0 },
+              grid: { color: "#1f2937" }
+            }
+          },
+          plugins: {
+            legend: { display: false }
+          }
+        }
+      });
+
+      updateCharts();
+    }
+
+    function updateCharts() {
+      if (!exerciseChart || !movementChart) return;
+
+      // Exercise totals
+      const labels = state.exercises.slice();
+      const data = labels.map(name => state.exerciseCounts[name] || 0);
+      exerciseChart.data.labels = labels;
+      exerciseChart.data.datasets[0].data = data;
+      exerciseChart.update();
+
+      // Movement days timeline
+      const timeline = buildMovementTimeline();
+      movementChart.data.labels = timeline.labels;
+      movementChart.data.datasets[0].data = timeline.data;
+      movementChart.update();
+    }
+
+    function initStatsToggle() {
+      const toggle = document.getElementById("statsToggle");
+      const section = document.getElementById("statsSection");
+      const icon = document.getElementById("statsToggleIcon");
+
+      toggle.addEventListener("click", () => {
+        const isOpen = section.style.display === "block";
+        section.style.display = isOpen ? "none" : "block";
+        icon.textContent = isOpen ? "▼" : "▲";
+      });
+    }
+
     document.addEventListener("DOMContentLoaded", () => {
       loadState();
       updateUI();
+      initStatsToggle();
+      initCharts();
 
-      document.getElementById("movedTodayBtn").onclick = logMovement;
-      document.getElementById("addExerciseBtn").onclick = addExercise;
+      document.getElementById("movedTodayBtn").addEventListener("click", logMovementToday);
+      document.getElementById("addExerciseBtn").addEventListener("click", addExercise);
+      document.getElementById("resetBtn").addEventListener("click", resetAll);
     });
   </script>
 </body>
